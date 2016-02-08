@@ -69,21 +69,6 @@ class PhpDocReader
      *
      * @throws AnnotationException
      * @return null|string Type of the property (content of var annotation)
-     *
-     * @deprecated Use getPropertyClass instead.
-     */
-    public function getPropertyType(ReflectionProperty $property)
-    {
-        return $this->getPropertyClass($property);
-    }
-
-    /**
-     * Parse the docblock of the property to get the class of the var annotation.
-     *
-     * @param ReflectionProperty $property
-     *
-     * @throws AnnotationException
-     * @return null|string Type of the property (content of var annotation)
      */
     public function getPropertyClass(ReflectionProperty $property)
     {
@@ -101,21 +86,6 @@ class PhpDocReader
     public function getPropertyClasses(ReflectionProperty $property)
     {
         return $this->parseTagTypes($property, self::TAG_PROPERTY);
-    }
-
-    /**
-     * Parse the docblock of the property to get the class of the param annotation.
-     *
-     * @param ReflectionParameter $parameter
-     *
-     * @throws AnnotationException
-     * @return null|string Type of the property (content of var annotation)
-     *
-     * @deprecated Use getParameterClass instead.
-     */
-    public function getParameterType(ReflectionParameter $parameter)
-    {
-        return $this->getParameterClass($parameter);
     }
 
     /**

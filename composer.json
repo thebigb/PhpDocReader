@@ -1,5 +1,5 @@
 {
-    "name": "php-di/phpdoc-reader",
+    "name": "1of0/phpdoc-reader",
     "type": "library",
     "description": "PhpDocReader parses @var and @param values in PHP docblocks (supports namespaced class names with the same resolution rules as PHP)",
     "keywords": ["phpdoc", "reflection"],
