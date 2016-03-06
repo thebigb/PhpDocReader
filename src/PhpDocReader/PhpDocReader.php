@@ -2,37 +2,26 @@
 
 namespace PhpDocReader;
 
-use PhpDocReader\PhpParser\UseStatementParser;
+use Doctrine\Common\Annotations\TokenParser;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionParameter;
 use ReflectionProperty;
 use Reflector;
+use SplFileObject;
 
-/**
- * PhpDoc reader
- *
- * @author Matthieu Napoli <matthieu@mnapoli.fr>
- */
-class PhpDocReader
+class PhpDocReader implements PhpDocReaderInterface
 {
     const TAG_RETURN = 'return';
     const TAG_PROPERTY = 'var';
     const TAG_PARAMETER = 'param';
 
     /**
-     * Parser for use-statements.
-     *
-     * @var UseStatementParser $parser
-     */
-    private $parser;
-
-    /**
      * List of types that do not exist as classes or interfaces.
      *
      * @var array $ignoredTypes
      */
-    private $ignoredTypes = array(
+    private $ignoredTypes = [
         'bool',
         'boolean',
         'string',
@@ -44,7 +33,7 @@ class PhpDocReader
         'object',
         'callable',
         'resource',
-    );
+    ];
 
     /**
      * Enable or disable throwing errors when PhpDoc Errors occur (when parsing annotations).
@@ -58,84 +47,53 @@ class PhpDocReader
      */
     public function __construct($ignorePhpDocErrors = false)
     {
-        $this->parser = new UseStatementParser();
         $this->ignorePhpDocErrors = $ignorePhpDocErrors;
     }
 
-    /**
-     * Parse the docblock of the property to get the class of the var annotation.
-     *
-     * @param ReflectionProperty $property
-     *
-     * @throws AnnotationException
-     * @return null|string Type of the property (content of var annotation)
-     */
-    public function getPropertyClass(ReflectionProperty $property)
+	/**
+	 * {@inheritdoc}
+	 */
+	public function getPropertyClass(ReflectionProperty $property)
     {
         return $this->parseTagType($property, self::TAG_PROPERTY);
     }
 
-    /**
-     * Parse the docblock of the property to get all classes declared in the var annotation.
-     *
-     * @param ReflectionProperty $property
-     *
-     * @return string[]
-     * @throws InvalidClassException
-     */
-    public function getPropertyClasses(ReflectionProperty $property)
+	/**
+	 * {@inheritdoc}
+	 */
+	public function getPropertyClasses(ReflectionProperty $property)
     {
         return $this->parseTagTypes($property, self::TAG_PROPERTY);
     }
 
-    /**
-     * Parse the docblock of the method to get the class of the param annotation.
-     *
-     * @param ReflectionParameter $parameter
-     *
-     * @throws AnnotationException
-     * @return null|string Type of the property (content of var annotation)
-     */
-    public function getParameterClass(ReflectionParameter $parameter)
+	/**
+	 * {@inheritdoc}
+	 */
+	public function getParameterClass(ReflectionParameter $parameter)
     {
         return $this->parseTagType($parameter, self::TAG_PARAMETER);
     }
 
-    /**
-     * Parse the docblock of the method to get all classes declared in the param annotation.
-     *
-     * @param ReflectionParameter $parameter
-     *
-     * @return string[]
-     * @throws InvalidClassException
-     */
-    public function getParameterClasses(ReflectionParameter $parameter)
+	/**
+	 * {@inheritdoc}
+	 */
+	public function getParameterClasses(ReflectionParameter $parameter)
     {
         return $this->parseTagTypes($parameter, self::TAG_PARAMETER);
     }
 
-    /**
-     * Parse the docblock of the method to get the class of the return annotation.
-     *
-     * @param ReflectionMethod $method
-     *
-     * @return null|string
-     * @throws InvalidClassException
-     */
-    public function getMethodReturnClass(ReflectionMethod $method)
+	/**
+	 * {@inheritdoc}
+	 */
+	public function getMethodReturnClass(ReflectionMethod $method)
     {
         return $this->parseTagType($method, self::TAG_RETURN);
     }
 
-    /**
-     * Parse the docblock of the method to get all classes declared in the return annotation.
-     *
-     * @param ReflectionMethod $method
-     *
-     * @return string[]
-     * @throws InvalidClassException
-     */
-    public function getMethodReturnClasses(ReflectionMethod $method)
+	/**
+	 * {@inheritdoc}
+	 */
+	public function getMethodReturnClasses(ReflectionMethod $method)
     {
         return $this->parseTagTypes($method, self::TAG_RETURN);
     }
@@ -212,6 +170,33 @@ class PhpDocReader
     }
 
     /**
+     * @param ReflectionClass $class
+     * 
+     * @return array A list with use statements in the form (Alias => FQN).
+     */
+    private function parseUseStatements(ReflectionClass $class)
+    {
+        if ($class->getFileName() === false)
+        {
+            return [];
+        }
+
+        $content = $this->readFileToLine($class->getFileName(), $class->getStartLine());
+
+        if ($content === null)
+        {
+            return [];
+        }
+
+        $namespace = preg_quote($class->getNamespaceName());
+        $content = preg_replace('/^.*?(\bnamespace\s+' . $namespace . '\s*[;{].*)$/s', '\\1', $content);
+        
+        $tokenizer = new TokenParser('<?php ' . $content);
+
+        return $tokenizer->parseUseStatements($class->getNamespaceName());
+    }
+
+    /**
      * Retrieves the type declaration from the first tag of the specified $tagName that are relevant to the provided
      * $member.
      *
@@ -279,7 +264,7 @@ class PhpDocReader
         $alias = strtolower($alias);
 
         // Retrieve "use" statements
-        $uses = $this->parser->parseUseStatements($class);
+        $uses = $this->parseUseStatements($class);
 
         // Imported class?
         if (array_key_exists($alias, $uses)) {
@@ -355,6 +340,41 @@ class PhpDocReader
         }
         
         throw new CannotResolveException($type, $member);
+    }
+
+    /**
+     * Gets the content of the file right up to the given line number.
+     * 
+     * Copied from doctrine/annotations package:
+     * @link https://raw.githubusercontent.com/doctrine/annotations/master/lib/Doctrine/Common/Annotations/PhpParser.php
+     *
+     * @param string  $filename   The name of the file to load.
+     * @param integer $lineNumber The number of lines to read from file.
+     *
+     * @return string The content of the file.
+     */
+    private function readFileToLine($filename, $lineNumber)
+    {
+        if (!is_file($filename))
+        {
+            return null;
+        }
+
+        $content = '';
+        $currentLine = 0;
+        $file = new SplFileObject($filename);
+        
+        while (!$file->eof())
+        {
+            if ($currentLine++ == $lineNumber)
+            {
+                break;
+            }
+
+            $content .= $file->fgets();
+        }
+
+        return $content;
     }
 
     /**
