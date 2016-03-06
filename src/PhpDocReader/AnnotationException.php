@@ -2,9 +2,11 @@
 
 namespace PhpDocReader;
 
+use Exception;
+
 /**
  * @author Matthieu Napoli <matthieu@mnapoli.fr>
  */
-class AnnotationException extends \Exception
+class AnnotationException extends Exception
 {
 }
